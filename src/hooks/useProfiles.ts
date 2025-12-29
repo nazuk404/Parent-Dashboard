@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import type { Profile } from '../lib/types'
 
 const STORAGE_KEY = 'snapsense-profiles'
+const SELECTED_PROFILE_KEY = 'snapsense-selected-profile'
 
 // Demo profiles to use if no profiles exist in localStorage
 const demoProfiles: Profile[] = [
@@ -70,10 +71,37 @@ export const useProfiles = create<ProfileState>((set, get) => ({
   initProfiles: () => {
     const profiles = loadProfiles()
     saveProfiles(profiles) // Ensure they're saved
-    set({ profiles, isLoading: false })
+    
+    // Attempt to load selected profile
+    let savedSelectedId = null
+    try {
+      savedSelectedId = localStorage.getItem(SELECTED_PROFILE_KEY)
+    } catch (e) {
+      console.error('Failed to load selected profile id', e)
+    }
+
+    // Verify the saved ID still exists in the loaded profiles
+    const isValid = savedSelectedId && profiles.some(p => p.id === savedSelectedId)
+    
+    set({ 
+      profiles, 
+      isLoading: false,
+      selectedProfileId: isValid ? savedSelectedId : null
+    })
   },
   
-  selectProfile: (id) => set({ selectedProfileId: id }),
+  selectProfile: (id) => {
+    set({ selectedProfileId: id })
+    try {
+      if (id) {
+        localStorage.setItem(SELECTED_PROFILE_KEY, id)
+      } else {
+        localStorage.removeItem(SELECTED_PROFILE_KEY)
+      }
+    } catch (e) {
+      console.error('Failed to save selected profile id', e)
+    }
+  },
   
   addProfile: ({ name, age, avatarColor, avatarEmoji, favoriteModule }) => {
     const id = crypto.randomUUID()
@@ -95,11 +123,17 @@ export const useProfiles = create<ProfileState>((set, get) => ({
   },
   
   removeProfile: (id) => {
+    const isCurrent = get().selectedProfileId === id
     const updatedProfiles = get().profiles.filter((p) => p.id !== id)
     set({ 
       profiles: updatedProfiles,
-      selectedProfileId: get().selectedProfileId === id ? null : get().selectedProfileId
+      selectedProfileId: isCurrent ? null : get().selectedProfileId
     })
     saveProfiles(updatedProfiles)
+    if (isCurrent) {
+        try {
+            localStorage.removeItem(SELECTED_PROFILE_KEY)
+        } catch(e) { /* ignore */ }
+    }
   },
 }))
